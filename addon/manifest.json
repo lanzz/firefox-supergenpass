@@ -1,0 +1,43 @@
+{
+    "manifest_version": 2,
+    "name": "SuperGenPass for Firefox",
+    "version": "1.0",
+    "description": "Generate reproducible passwords based on a master password and a page's domain",
+    "developer": {
+        "name": "Mihail Milushev <mihail@lanzz.org>",
+        "url": "https://github.com/lanzz"
+    },
+    "homepage_url": "https://github.com/lanzz/firefox-supergenpass",
+    "browser_specific_settings": {
+        "gecko": {
+            "id": "firefox-supergenpass@lanzz.org"
+        }
+    },
+    "permissions": [
+        "activeTab",
+        "contextMenus",
+        "menus",
+        "storage"
+    ],
+    "icons": {
+        "48": "assets/icon-48.png",
+        "96": "assets/icon-96.png"
+    },
+    "background": {
+        "scripts": ["background.js"],
+        "type": "module"
+    },
+    "browser_action": {
+        "default_title": "SuperGenPass Options",
+        "default_popup": "options.html"
+    },
+    "page_action": {
+        "default_icon": {
+            "19": "assets/icon-19.png",
+            "38": "assets/icon-38.png"
+        },
+        "default_title": "Generate Password",
+        "default_popup": "generate.html",
+        "show_matches": ["http://*/*", "https://*/*", "file:///*"]
+    }
+}

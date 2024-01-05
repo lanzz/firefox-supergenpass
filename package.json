@@ -4,13 +4,13 @@
   "description": "",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "web-ext run --source-dir plain",
-    "build": "web-ext build --source-dir plain"
+    "start": "web-ext run --source-dir addon",
+    "build": "web-ext build --source-dir addon"
   },
   "author": "Patrik Dudits <patrik@zeromagic.sk>",
   "license": "GPLv2",
   "devDependencies": {
-    "web-ext": "^2.9.3"
+    "web-ext": "^7.10.0"
   },
   "dependencies": {}
 }

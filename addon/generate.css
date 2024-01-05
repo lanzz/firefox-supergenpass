@@ -1,0 +1,58 @@
+body {
+    font-family: 'Helvetica', 'Arial', sans-serif;
+}
+body.loading {
+    display: none;
+}
+
+input#password {
+    font-family: 'Courier New', fixed;
+    font-weight: bold;
+    text-align: center;
+}
+
+#domain {
+    text-align: center;
+    padding-bottom: .5em;
+}
+
+.container {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: .5em;
+}
+
+.container > .break {
+    flex-basis: 100%;
+    height: 0;
+}
+
+.container svg {
+    display: block;
+}
+
+.container #eye, .container #copy, .container #lock {
+    cursor: pointer;
+    opacity: .5;
+}
+.container #eye:hover, .container #copy:hover, .container #copy.done, .container #lock:hover {
+    opacity: 1;
+}
+
+.container #eye svg {
+    display: none;
+}
+.container #eye.open svg.open, .container #eye.closed svg.closed {
+    display: block;
+}
+
+.container #copy.done {
+    cursor: default;
+}
+.container #copy svg.done, .container #copy.done svg.copy {
+    display: none;
+}
+.container #copy.done svg.done, .container #copy svg.copy {
+    display: block;
+}
