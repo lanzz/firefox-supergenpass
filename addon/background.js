@@ -36,17 +36,18 @@ const controller = {
     },
 
     async getMasterPassword() {
-        if (this.password) {
-            console.debug('Master password available');
-            return this.password;
+        const {masterPassword} = await browser.storage.session.get({masterPassword: undefined});
+        if (masterPassword !== undefined) {
+            console.debug('Retrieved master password from session storage');
+            return masterPassword;
         }
         console.debug('Master password not available');
         return await this.promptForMasterPassword();
     },
 
-    setMasterPassword(password) {
+    async setMasterPassword(password) {
+        await brower.storage.session.set({masterPassword: password});
         console.debug('Master password set');
-        this.password = password;
         if (this.passwordPrompt) {
             console.debug('Resolving password promise');
             this.passwordPrompt.resolve(password);
@@ -56,9 +57,9 @@ const controller = {
         this.closePasswordPrompt();
     },
 
-    clearMasterPassword() {
-        console.debug('Master password cleared');
-        this.password = null;
+    async clearMasterPassword() {
+        await browser.storage.session.remove('masterPassword');
+        console.debug('Cleared master password in session storage');
         this.closePasswordPrompt();
     },
 
@@ -247,7 +248,7 @@ const messageController = {
                 break;
             case 'clear-master-password':
                 console.debug(`Received message: clear-master-password (url=${message.url})`);
-                controller.clearMasterPassword();
+                await controller.clearMasterPassword();
                 break;
             default:
                 console.group(`Received unexpected message from page action: ${type} (port=${port.sender.contextId})`);
@@ -288,7 +289,7 @@ const messageController = {
         switch (type) {
             case 'set-master-password':
                 console.debug(`Received message: set-master-password (port=${port.sender.contextId})`);
-                controller.setMasterPassword(message.password);
+                await controller.setMasterPassword(message.password);
                 break;
             case 'cancel':
                 console.debug(`Received message: cancel (port=${port.sender.contextId})`);
