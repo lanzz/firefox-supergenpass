@@ -1,7 +1,7 @@
 {
     "manifest_version": 2,
-    "name": "SuperGenPass for Firefox",
-    "version": "1.0",
+    "name": "SuperGenPass",
+    "version": "1.0.1",
     "description": "Generate reproducible passwords based on a master password and a page's domain",
     "developer": {
         "name": "Mihail Milushev <mihail@lanzz.org>",

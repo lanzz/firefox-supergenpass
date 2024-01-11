@@ -387,12 +387,10 @@ const messageController = {
     },
 };
 
-browser.runtime.onInstalled.addListener(() => {
-    console.debug('Initializing extension');
-    try {
-        controller.init();
-        messageController.init();
-    } finally {
-        console.debug('Extension initialized');
-    }
-});
+console.debug('Initializing extension');
+try {
+    controller.init();
+    messageController.init();
+} finally {
+    console.debug('Extension initialized');
+}
