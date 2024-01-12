@@ -8,50 +8,68 @@ const IP_REGEXP = new RegExp('^([0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3})$
 
 const controller = {
     password: null,
-    secret: undefined,
-    len: undefined,
-    promptWindow: undefined,
-    passwordPromises: [],
-    optionsPromises: [],
+    passwordPrompt: undefined,
 
     init() {
-        console.group('Initializing background controller');
-        try {
-            browser.storage.sync.get({
-                secret: DEFAULT_SECRET,
-                len: DEFAULT_LENGTH,
-            }).then(options => {
-                console.debug('Retrieved options from sync storage');
-                this.setOptions(options);
-            });
-            browser.windows.onRemoved.addListener(windowId => this._windowClosed(windowId));
-            console.debug('Background controller initialized');
-        } finally {
-            console.groupEnd();
-        }
+        console.debug('Initializing background controller');
+        browser.windows.onRemoved.addListener(windowId => this.windowClosed(windowId));
+        console.debug('Background controller initialized');
     },
 
-    getMasterPassword() {
-        const promise = new Promise((resolve, reject) => {
-            if (this.password) {
-                console.debug('Master password available');
-                resolve(this.password);
-                return;
-            }
-            console.debug('Master password not available, opening prompt');
-            this.passwordPromises.push([resolve, reject]);
-            this._openMasterPasswordPopup();
+    async getOptions() {
+        console.debug('Getting options from sync storage');
+        const options = await browser.storage.sync.get({
+            secret: DEFAULT_SECRET,
+            len: DEFAULT_LENGTH,
         });
-        return promise;
+        console.debug('Retrieved options from sync storage');
+        return options;
     },
 
-    _openMasterPasswordPopup() {
-        if (this.promptWindow) {
-            this._focusPopup();
-            return;
+    async setOptions(options) {
+        console.debug('Storing options in sync storage');
+        await browser.storage.sync.set({
+            len: options.len,
+            secret: options.secret,
+        });
+        console.debug('Persisted options in sync storage');
+    },
+
+    async getMasterPassword() {
+        if (this.password) {
+            console.debug('Master password available');
+            return this.password;
         }
-        console.debug('Creating master password prompt window');
-        const creating = browser.windows.create({
+        console.debug('Master password not available');
+        return await this.promptForMasterPassword();
+    },
+
+    setMasterPassword(password) {
+        console.debug('Master password set');
+        this.password = password;
+        if (this.passwordPrompt) {
+            console.debug('Resolving password promise');
+            this.passwordPrompt.resolve(password);
+            this.passwordPrompt.resolved = true;
+        }
+        console.debug('Closing password prompt window');
+        this.closePasswordPrompt();
+    },
+
+    clearMasterPassword() {
+        console.debug('Master password cleared');
+        this.password = null;
+        this.closePasswordPrompt();
+    },
+
+    async promptForMasterPassword() {
+        if (this.passwordPrompt) {
+            console.debug('Password prompt window already open');
+            this.focusPopup();
+            return this.passwordPrompt.promise;
+        }
+        console.debug('Creating password prompt window');
+        const windowInfo = await browser.windows.create({
             type: 'panel',
             url: 'password.html',
             width: 500,
@@ -59,176 +77,98 @@ const controller = {
             left: Math.round((window.screen.width - 500) / 2),
             top: Math.round((window.screen.height - 200) / 2 - 100),
         });
-        creating.then(windowInfo => {
-            console.debug(`Master password prompt window created (windowId=${windowInfo.id})`);
-            this.promptWindow = windowInfo;
-        }, error => {
-            console.error(`Could not open master password prompt window: ${error}`);
+        console.debug(`Password prompt window created (windowId=${windowInfo.id})`);
+        const {promise, resolve, reject} = Promise.withResolvers();
+        this.passwordPrompt = {
+            window: windowInfo,
+            promise,
+            resolve,
+            reject,
+            resolved: false,
+        };
+        return await promise;
+    },
+
+    focusPopup() {
+        console.debug(`Drawing attention to password prompt (windowId=${this.passwordPrompt.window.id})`);
+        browser.windows.update(this.passwordPrompt.window.id, {
+            drawAttention: true,
+            focused: true,
         });
     },
 
-    _focusPopup() {
-        console.group(`Master password prompt window already open, drawing attention (windowId=${this.promptWindow.id})`);
-        try {
-            browser.windows.update(this.promptWindow.id, {
-                drawAttention: true,
-                focused: true,
-            });
-        } finally {
-            console.groupEnd();
-        }
-    },
-
-    closeMasterPasswordPopup() {
-        if (this.promptWindow === undefined) {
-            console.debug('No master password prompt window to close');
+    closePasswordPrompt() {
+        if (!this.passwordPrompt) {
+            console.debug('Password prompt window is not open');
             return;
         }
-        console.debug(`Closing master password prompt window (windowId=${this.promptWindow.id})`);
-        browser.windows.remove(this.promptWindow.id);
+        console.debug(`Closing master password prompt window (windowId=${this.passwordPrompt.window.id})`);
+        browser.windows.remove(this.passwordPrompt.window.id);
     },
 
-    _windowClosed(windowId) {
-        if (!this.promptWindow || (windowId != this.promptWindow.id)) {
+    windowClosed(windowId) {
+        if (!this.passwordPrompt || (windowId != this.passwordPrompt.window.id)) {
             return;
         }
-        console.group(`Master password prompt window closed (windowId=${windowId})`);
-        try {
-            console.debug('Clearing master password prompt window state');
-            this.promptWindow = undefined;
-            if (this.passwordPromises.length) {
-                const error = new Error('Password prompt closed');
-                console.debug(`Rejecting ${this.passwordPromises.length} pending promises`);
-                this.passwordPromises.forEach(([resolve, reject]) => reject(error));
-                this.passwordPromises = [];
-            } else {
-                console.debug('No pending promises');
-            }
-        } finally {
-            console.groupEnd();
+        console.debug(`Password prompt window closed (windowId=${windowId})`);
+        if (!this.passwordPrompt.resolved) {
+            console.debug('Rejecting password promise');
+            this.passwordPrompt.reject(new Error('Password prompt closed'));
         }
+        console.debug('Clearing password prompt window state');
+        this.passwordPrompt = undefined;
     },
 
-    setMasterPassword(password) {
-        console.group('Master password set');
-        try {
-            this.password = password;
-            if (this.passwordPromises) {
-                console.debug(`Resolving ${this.passwordPromises.length} pending promises`);
-                this.passwordPromises.forEach(([resolve, reject]) => resolve(password));
-                this.passwordPromises = [];
-            } else {
-                console.debug('No pending promises');
-            }
-            this.closeMasterPasswordPopup();
-        } finally {
-            console.groupEnd();
-        }
-    },
-
-    generatePassword(uri) {
+    async generatePassword(uri) {
         console.debug(`Generating password for ${uri}`);
-        return new Promise((resolve, reject) => {
-            this.getMasterPassword().then(masterPassword => {
-                console.group(`Resolving password request for ${uri}`);
-                try {
-                    const domain = this._extractDomain(uri);
-                    console.debug(`Domain name: ${domain}`);
-                    let password = masterPassword + this.secret + ':' + domain;
+        const [masterPassword, options] = await Promise.all([
+            this.getMasterPassword(),
+            this.getOptions(),
+        ]);
 
-                    let i = 0;
-                    while (i < 10 || !(this._checkPassword(password.substring(0, this.len)))) {
-                        password = md5(password);
-                        i++;
-                    }
-                    resolve({
-                        domain: domain,
-                        password: password.substring(0, this.len),
-                    });
-                } finally {
-                    console.groupEnd();
-                }
-            }).catch(error => {
-                console.debug(`Master password prompt was rejected, rejecting request for ${uri}`);
-                reject(error);
-            });
-        });
-    },
+        const domain = this.extractDomain(uri);
+        let password = masterPassword + options.secret + ':' + domain;
 
-    _extractDomain(uri) {
-        console.group(`Extracting domain name from ${uri}`);
-        try {
-            const url = new URL(uri);
-
-            if ((url.protocol === 'file:') && (url.hostname === '')) {
-                console.debug('Domain name: localhost (for file:/// URI)');
-                return 'localhost';
-            }
-
-            if (url.hostname.match(IP_REGEXP)) {
-                console.debug(`Domain name: ${url.hostname} (IPv4 address)`);
-                return url.hostname;
-            }
-
-            const parts = url.hostname.split('.');
-            let domain = parts[parts.length - 2] + '.' + parts[parts.length - 1];
-            for (let i = 0; i < TLD_LIST.length; i++) {
-                if (domain == TLD_LIST[i]) {
-                    domain = parts[parts.length - 3] + '.' + domain;
-                    console.debug(`Detected multi-level eTLD: ${TLD_LIST[i]}`);
-                    break;
-                }
-            }
-            console.debug(`Domain name: ${domain}`);
-            return domain;
-        } finally {
-            console.groupEnd();
+        let i = 0;
+        while (i < 10 || !(this.checkPassword(password.substring(0, options.len)))) {
+            password = md5(password);
+            i++;
         }
+        password = password.substring(0, options.len);
+        return {
+            domain,
+            password,
+        };
     },
 
-    _checkPassword(password) {
+    extractDomain(uri) {
+        console.debug(`Extracting domain name from ${uri}`);
+        const url = new URL(uri);
+
+        if ((url.protocol === 'file:') && (url.hostname === '')) {
+            console.debug('Domain name: localhost (for file:/// URI)');
+            return 'localhost';
+        }
+        if (url.hostname.match(IP_REGEXP)) {
+            console.debug(`Domain name: ${url.hostname} (IPv4 address)`);
+            return url.hostname;
+        }
+
+        const parts = url.hostname.split('.');
+        let domain = parts[parts.length - 2] + '.' + parts[parts.length - 1];
+        for (let i = 0; i < TLD_LIST.length; i++) {
+            if (domain == TLD_LIST[i]) {
+                domain = parts[parts.length - 3] + '.' + domain;
+                console.debug(`Detected multi-level eTLD: ${TLD_LIST[i]}`);
+                break;
+            }
+        }
+        console.debug(`Domain name: ${domain}`);
+        return domain;
+    },
+
+    checkPassword(password) {
         return (password.search(/[a-z]/) === 0 && password.search(/[0-9]/) > 0 && password.search(/[A-Z]/) > 0)? true: false;
-    },
-
-    clearMasterPassword() {
-        this.password = null;
-    },
-
-    getOptions() {
-        return new Promise(resolve => {
-            if ((this.len === undefined) || (this.secret === undefined)) {
-                console.debug('Options not available yet, enqueueing');
-                this.optionsPromises.push(resolve);
-                return;
-            }
-            console.debug('Options available, resolving promise immediately');
-            resolve({
-                len: this.len,
-                secret: this.secret,
-            });
-        });
-    },
-
-    setOptions(options) {
-        console.group('Updating options');
-        try {
-            this.len = options.len;
-            this.secret = options.secret;
-            browser.storage.sync.set({
-                len: this.len,
-                secret: this.secret,
-            });
-            if (this.optionsPromises.length) {
-                console.debug(`Resolving ${this.optionsPromises.length} pending options requests`);
-                this.optionsPromises.forEach(resolve => resolve({
-                    len: this.len,
-                    secret: this.secret,
-                }));
-                this.optionsPromises = [];
-            }
-        } finally {
-            console.groupEnd();
-        }
     },
 };
 
@@ -240,43 +180,27 @@ const messageController = {
     },
 
     init() {
-        console.group('Initializing background message controller');
-        try {
-            browser.runtime.onConnect.addListener(port => this.connected(port));
-            console.debug('Background message controller initialized');
-        } finally {
-            console.groupEnd();
-        }
+        console.debug('Initializing background message controller');
+        browser.runtime.onConnect.addListener(port => this.connected(port));
+        console.debug('Background message controller initialized');
     },
 
     connected(port) {
         switch (port.name) {
             case 'options':
-                console.group(`Opened options connection: ${port.sender.contextId}`);
-                try {
-                    port.onMessage.addListener(message => this._handleOptionsMessage(port, message));
-                    port.onDisconnect.addListener(port => this._closePort(port, 'options'));
-                } finally {
-                    console.groupEnd();
-                }
+                console.debug(`Opened options connection: ${port.sender.contextId}`);
+                port.onMessage.addListener(async message => await this.handleOptionsMessage(port, message));
+                port.onDisconnect.addListener(port => this.closePort(port, 'options'));
                 break;
             case 'page':
-                console.group(`Opened page connection: ${port.sender.contextId}`);
-                try {
-                    port.onMessage.addListener(message => this._handlePageMessage(port, message));
-                    port.onDisconnect.addListener(port => this._closePort(port, 'page'));
-                } finally {
-                    console.groupEnd();
-                }
+                console.debug(`Opened page connection: ${port.sender.contextId}`);
+                port.onMessage.addListener(async message => await this.handlePageMessage(port, message));
+                port.onDisconnect.addListener(port => this.closePort(port, 'page'));
                 break;
             case 'password':
-                console.group(`Opened password connection: ${port.sender.contextId}`);
-                try {
-                    port.onMessage.addListener(message => this._handlePasswordMessage(port, message));
-                    port.onDisconnect.addListener(port => this._closePort(port, 'password'));
-                } finally {
-                    console.groupEnd();
-                }
+                console.debug(`Opened password connection: ${port.sender.contextId}`);
+                port.onMessage.addListener(async message => await this.handlePasswordMessage(port, message));
+                port.onDisconnect.addListener(port => this.closePort(port, 'password'));
                 break;
             default:
                 console.warn(`Unexpected connection type: ${port.name}`);
@@ -284,7 +208,7 @@ const messageController = {
         }
     },
 
-    _closePort(port, type) {
+    closePort(port, type) {
         if (port.error) {
             console.error(`Closed ${type} connection: ${port.sender.contextId}: ${port.error}`);
         } else {
@@ -293,30 +217,20 @@ const messageController = {
         port.closed = true;
     },
 
-    _handleOptionsMessage(port, {type, ...message}) {
+    async handleOptionsMessage(port, {type, ...message}) {
         switch (type) {
             case 'get-options':
-                console.group(`Received message: get-options (port=${port.sender.contextId})`);
-                try {
-                    controller.getOptions().then(options => {
-                        console.debug(`Responding to get-options request (port=${port.sender.contextId})`);
-                        const message = {
-                            type: 'options',
-                            ...options,
-                        };
-                        port.postMessage(message);
-                    });
-                } finally {
-                    console.groupEnd();
-                }
+                console.debug(`Received message: get-options (port=${port.sender.contextId})`);
+                const options = await controller.getOptions();
+                console.debug(`Responding to get-options request (port=${port.sender.contextId})`);
+                port.postMessage({
+                    type: 'options',
+                    ...options,
+                });
                 break;
             case 'update-options':
-                console.group(`Received message: update-options (port=${port.sender.contextId})`);
-                try {
-                    controller.setOptions(message);
-                } finally {
-                    console.groupEnd();
-                }
+                console.debug(`Received message: update-options (port=${port.sender.contextId})`);
+                await controller.setOptions(message);
                 break;
             default:
                 console.group(`Received unexpected message from options dialog: ${type} (port=${port.sender.contextId})`);
@@ -325,39 +239,11 @@ const messageController = {
         }
     },
 
-    _handlePageMessage(port, {type, ...message}) {
+    async handlePageMessage(port, {type, ...message}) {
         switch (type) {
             case 'generate-password':
-                console.debug(`Received message: generate-password (url=${message.url})`);
-                controller.generatePassword(message.url).then(({domain, password}) => {
-                    console.group(`Responding to generate-password request (port=${port.sender.contextId})`);
-                    try {
-                        if (port.closed) {
-                            console.debug('Port already closed');
-                            return;
-                        }
-                        port.postMessage({
-                            type: 'password',
-                            domain: domain,
-                            password: password,
-                        });
-                    } finally {
-                        console.groupEnd();
-                    }
-                }).catch(error => {
-                    console.group(`Rejecting generate-password request (port=${port.sender.contextId}): ${error}`);
-                    try {
-                        if (port.closed) {
-                            console.debug('Port already closed');
-                            return;
-                        }
-                        port.postMessage({
-                            type: 'password-not-available',
-                        });
-                    } finally {
-                        console.groupEnd();
-                    }
-                });
+                console.debug(`Received message: generate-password (port=${port.sender.contextId}, url=${message.url})`);
+                await this.generatePassword(port, message);
                 break;
             case 'clear-master-password':
                 console.debug(`Received message: clear-master-password (url=${message.url})`);
@@ -370,7 +256,35 @@ const messageController = {
         }
     },
 
-    _handlePasswordMessage(port, {type, ...message}) {
+    async generatePassword(port, {url}) {
+        try {
+            const {domain, password} = await controller.generatePassword(url);
+            console.debug(`Responding to generate-password request (port=${port.sender.contextId})`);
+            if (port.closed) {
+                console.debug('Port already closed');
+                return;
+            }
+            port.postMessage({
+                type: 'password',
+                domain: domain,
+                password: password,
+            });
+        } catch(error) {
+            console.error(error);
+            console.debug(`Rejecting generate-password request (port=${port.sender.contextId}): ${error.message}`);
+            if (port.closed) {
+                console.debug('Port already closed');
+            } else {
+                port.postMessage({
+                    type: 'password-not-available',
+                    error: error.message,
+                });
+            }
+            throw error;
+        }
+    },
+
+    async handlePasswordMessage(port, {type, ...message}) {
         switch (type) {
             case 'set-master-password':
                 console.debug(`Received message: set-master-password (port=${port.sender.contextId})`);
@@ -378,7 +292,7 @@ const messageController = {
                 break;
             case 'cancel':
                 console.debug(`Received message: cancel (port=${port.sender.contextId})`);
-                controller.closeMasterPasswordPopup();
+                controller.closePasswordPrompt();
                 break;
             default:
                 console.warn(`Received unexpected message from password dialog: ${type} (port=${port.sender.contextId})`);
@@ -388,9 +302,9 @@ const messageController = {
 };
 
 console.debug('Initializing extension');
-try {
-    controller.init();
-    messageController.init();
-} finally {
-    console.debug('Extension initialized');
-}
+controller.init();
+messageController.init();
+console.debug('Extension initialized');
+
+window.controller = controller;
+window.messageController = messageController;
