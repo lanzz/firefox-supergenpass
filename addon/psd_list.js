@@ -2,7 +2,10 @@
 // https://github.com/chriszarate/supergenpass/blob/607c4dcc26d7396cf0585aaf5aa07eb506a32064/js/sgp.js
 // https://github.com/pdudits/firefox-supergenpass/blob/307a9930781c0bfdabea437e2eb7c531f94e2dac/plain/background.js
 
-const TLD_LIST = [
+// list of supported Public Suffix Domains
+// this list is not exhaustive, but is fixed for compatibility with official SuperGenPass
+export const MAX_PSD_LEVELS = 3;
+export const PSD_LIST = [
     'ac.ac', 'com.ac', 'edu.ac', 'gov.ac', 'net.ac', 'mil.ac', 'org.ac', 'com.ae', 'net.ae',
     'org.ae', 'gov.ae', 'ac.ae', 'co.ae', 'sch.ae', 'pro.ae', 'com.ai', 'org.ai', 'edu.ai',
     'gov.ai', 'com.ar', 'net.ar', 'org.ar', 'gov.ar', 'mil.ar', 'edu.ar', 'int.ar', 'co.at',
@@ -122,5 +125,3 @@ const TLD_LIST = [
     'se.com', 'uk.com', 'uk.net', 'us.com', 'uy.com', 'za.com', 'dk.org', 'tel.no', 'fax.nr',
     'mob.nr', 'mobil.nr', 'mobile.nr', 'tel.nr', 'tlf.nr', 'e164.arpa',
 ];
-
-export default TLD_LIST;

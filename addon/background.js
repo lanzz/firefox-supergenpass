@@ -1,10 +1,7 @@
 import md5 from './md5.js';
-import TLD_LIST from './tld.js';
 
 const DEFAULT_SECRET = '';
 const DEFAULT_LENGTH = 10;
-
-const IP_REGEXP = new RegExp('^([0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3})$');
 
 const controller = {
     password: null,
@@ -119,14 +116,13 @@ const controller = {
         this.passwordPrompt = undefined;
     },
 
-    async generatePassword(uri) {
-        console.debug(`Generating password for ${uri}`);
+    async generatePassword(domain) {
+        console.debug(`Generating password for ${domain}`);
         const [masterPassword, options] = await Promise.all([
             this.getMasterPassword(),
             this.getOptions(),
         ]);
 
-        const domain = this.extractDomain(uri);
         let password = masterPassword + options.secret + ':' + domain;
 
         let i = 0;
@@ -134,37 +130,7 @@ const controller = {
             password = md5(password);
             i++;
         }
-        password = password.substring(0, options.len);
-        return {
-            domain,
-            password,
-        };
-    },
-
-    extractDomain(uri) {
-        console.debug(`Extracting domain name from ${uri}`);
-        const url = new URL(uri);
-
-        if ((url.protocol === 'file:') && (url.hostname === '')) {
-            console.debug('Domain name: localhost (for file:/// URI)');
-            return 'localhost';
-        }
-        if (url.hostname.match(IP_REGEXP)) {
-            console.debug(`Domain name: ${url.hostname} (IPv4 address)`);
-            return url.hostname;
-        }
-
-        const parts = url.hostname.split('.');
-        let domain = parts[parts.length - 2] + '.' + parts[parts.length - 1];
-        for (let i = 0; i < TLD_LIST.length; i++) {
-            if (domain == TLD_LIST[i]) {
-                domain = parts[parts.length - 3] + '.' + domain;
-                console.debug(`Detected multi-level eTLD: ${TLD_LIST[i]}`);
-                break;
-            }
-        }
-        console.debug(`Domain name: ${domain}`);
-        return domain;
+        return password.substring(0, options.len);
     },
 
     checkPassword(password) {
@@ -242,7 +208,7 @@ const messageController = {
     async handlePageMessage(port, {type, ...message}) {
         switch (type) {
             case 'generate-password':
-                console.debug(`Received message: generate-password (port=${port.sender.contextId}, url=${message.url})`);
+                console.debug(`Received message: generate-password (port=${port.sender.contextId}, domain=${message.domain})`);
                 await this.generatePassword(port, message);
                 break;
             case 'clear-master-password':
@@ -256,9 +222,9 @@ const messageController = {
         }
     },
 
-    async generatePassword(port, {url}) {
+    async generatePassword(port, {domain}) {
         try {
-            const {domain, password} = await controller.generatePassword(url);
+            const password = await controller.generatePassword(domain);
             console.debug(`Responding to generate-password request (port=${port.sender.contextId})`);
             if (port.closed) {
                 console.debug('Port already closed');
@@ -266,7 +232,6 @@ const messageController = {
             }
             port.postMessage({
                 type: 'password',
-                domain: domain,
                 password: password,
             });
         } catch(error) {

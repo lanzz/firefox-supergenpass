@@ -1,19 +1,37 @@
 body {
     font-family: 'Helvetica', 'Arial', sans-serif;
+    overflow: hidden;
 }
-body.loading {
-    display: none;
+body.loading input#password {
+    background: #ccc;
+    color: #ccc;
 }
 
 input#password {
     font-family: 'Courier New', fixed;
     font-weight: bold;
     text-align: center;
+    background: #fff;
+    color: #000;
+    border: 1px solid #777;
+    border-radius: 3px;
+    padding: .2em .4em;
 }
 
-#domain {
+#hostname-container {
     text-align: center;
     padding-bottom: .5em;
+}
+
+#hostname > span {
+    font-weight: bold;
+    cursor: pointer;
+}
+#hostname > span, #hostname:hover > span:hover, #hostname:hover > span:hover ~ span {
+    opacity: 1;
+}
+#hostname > span.skipped, #hostname:hover > span {
+    opacity: .3;
 }
 
 .container {
